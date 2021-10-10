@@ -1,5 +1,5 @@
 resource "google_container_cluster" "cluster" {
-  name     = "prod-cluster"
+  name     = "cluster"
   location = "us-central1"
 
   node_locations = ["us-central1-a", "us-central1-b"]
@@ -15,7 +15,7 @@ resource "google_container_cluster" "cluster" {
   }
 
   resource_usage_export_config {
-    enable_network_egress_metering = false
+    enable_network_egress_metering = true
     enable_resource_consumption_metering = true
 
     bigquery_destination {
