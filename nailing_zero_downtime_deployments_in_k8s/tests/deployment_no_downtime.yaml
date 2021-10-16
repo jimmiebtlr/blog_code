@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: no-downtime
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: no-downtime
+  template:
+    metadata:
+      labels:
+        app: no-downtime
+    spec:
+      containers:
+        - name: app
+          image: jimmiebtlr/infra-diagnosis-service:latest
+          command: ["./app", "--port", "8080", "--graceful", ""]
+
+          ports:
+            - name: app-port
+              containerPort: 8080
+
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: app-port
