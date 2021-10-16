@@ -14,8 +14,9 @@ spec:
     spec:
       containers:
         - name: app
-          image: jimmiebtlr/infra-diagnosis-service:latest
-          command: ["./app", "--port", "8080", "--graceful", ""]
+          image: jimmiebtlr/infra-debug-service:0.1.0
+          command: ["./app"]
+          args: ["--port", "8080", "--graceful", "true"]
 
           ports:
             - name: app-port
@@ -25,3 +26,17 @@ spec:
             httpGet:
               path: /healthz
               port: app-port
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: no-downtime
+spec:
+  selector:
+    app: no-downtime
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: LoadBalancer
