@@ -33,24 +33,33 @@ func content(s Settings) http.HandlerFunc {
 	}
 }
 
-func startServer(s Settings) {
+func startServer(s Settings) http.Server {
 	http.HandleFunc("/healthz", healthz(s))
 	http.HandleFunc("/contetn", content(s))
 
+	srv := http.Server{
+		Addr: ":" + strconv.Itoa(s.Port),
+	}
 	go func() {
-		if err := http.ListenAndServe(":"+strconv.Itoa(s.Port), nil); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen:%+s\n", err)
 		}
 	}()
+
+	return srv
 }
 
 func main() {
 	arg.MustParse(&args)
 
+	// Delay to simulate some non-zero startup time
+	time.Sleep(10 * time.Second)
+
 	log.Printf("Starting on port: %v Graceful: %v", args.Port, args.Graceful)
-	startServer(args)
+	srv := startServer(args)
 
 	if args.Graceful {
+		fmt.Println("Graceful shutdown enabled")
 		sc := make(chan os.Signal, 1)
 
 		signal.Notify(sc,
@@ -60,7 +69,12 @@ func main() {
 
 		<-sc
 
+		fmt.Println("Terminating after 10s")
 		// After recieving signal, wait 10 seconds then exit
+		// Better to have some mechanism in place for checking with other parts to make sure
+		// they're ready to shutdown
+		time.Sleep(10 * time.Second)
+		srv.SetKeepAlivesEnabled(false)
 		time.Sleep(10 * time.Second)
 	} else {
 		// Since we don't handle signal, this exits immediatly? Or does it hit max timeout to exit?

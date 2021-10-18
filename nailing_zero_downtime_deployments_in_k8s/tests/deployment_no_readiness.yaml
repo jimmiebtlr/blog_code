@@ -22,19 +22,14 @@ spec:
           command: ["./app"]
           args: ["--port", "8080"]
 
-          ports:
-            - name: app-port
-              containerPort: 8080
-
           lifecycle:
             preStop:
               exec:
                 command: ["sleep", "20"]
 
-          readinessProbe:
-            httpGet:
-              path: /healthz
-              port: app-port
+          ports:
+            - name: app-port
+              containerPort: 8080
 
 ---
 apiVersion: v1

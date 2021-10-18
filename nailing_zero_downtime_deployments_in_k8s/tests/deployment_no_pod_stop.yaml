@@ -26,11 +26,6 @@ spec:
             - name: app-port
               containerPort: 8080
 
-          lifecycle:
-            preStop:
-              exec:
-                command: ["sleep", "20"]
-
           readinessProbe:
             httpGet:
               path: /healthz
