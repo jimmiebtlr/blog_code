@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: jimmiebtlr/infra-debug-service:0.1.4
+          image: jimmiebtlr/infra-debug-service:0.1.5
           command: ["./app"]
           args: ["--port", "8080"]
 
@@ -33,7 +33,7 @@ spec:
 
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /custom-health
               port: app-port
 
 ---

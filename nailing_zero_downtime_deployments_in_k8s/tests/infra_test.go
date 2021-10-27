@@ -2,6 +2,7 @@ package tests
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os/exec"
 	"runtime"
@@ -73,12 +74,16 @@ func startRequester(t *testing.T, c *StatusCodeCounter, url string, doneMutex *D
 			return
 		}
 
-		resp, err := client.Get(url)
+		resp, err := client.Get(url + "/content")
 		if err != nil {
 			c.Inc(-1)
 		} else {
-			resp.Body.Close()
+			defer resp.Body.Close()
 			c.Inc(resp.StatusCode)
+			body, _ := ioutil.ReadAll(resp.Body)
+			if string(body) == "I am alive!" {
+				t.Log(string(body))
+			}
 		}
 	}
 }
