@@ -49,6 +49,29 @@ func startServer(s Settings) http.Server {
 	return srv
 }
 
+// gracefulShutdown waits for SIGTERM or SIGQUIT
+// then waits 10 seconds (since traffic should have stopped)
+// it then stops keepalive connections, waits another 10 seconds
+// and returns (should be end of program)
+func gracefulShutdown(srv http.Server) {
+	sc := make(chan os.Signal, 1)
+
+	signal.Notify(sc,
+		os.Interrupt,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+
+	<-sc
+
+	fmt.Println("Terminating after 10s")
+	// After recieving signal, wait 10 seconds then exit
+	// Better to have some mechanism in place for checking with other parts to make sure
+	// they're ready to shutdown
+	time.Sleep(10 * time.Second)
+	srv.SetKeepAlivesEnabled(false)
+	time.Sleep(10 * time.Second)
+}
+
 func main() {
 	arg.MustParse(&args)
 
@@ -60,24 +83,9 @@ func main() {
 
 	if args.Graceful {
 		fmt.Println("Graceful shutdown enabled")
-		sc := make(chan os.Signal, 1)
 
-		signal.Notify(sc,
-			os.Interrupt,
-			syscall.SIGTERM,
-			syscall.SIGQUIT)
-
-		<-sc
-
-		fmt.Println("Terminating after 10s")
-		// After recieving signal, wait 10 seconds then exit
-		// Better to have some mechanism in place for checking with other parts to make sure
-		// they're ready to shutdown
-		time.Sleep(10 * time.Second)
-		srv.SetKeepAlivesEnabled(false)
-		time.Sleep(10 * time.Second)
+		gracefulShutdown(srv)
 	} else {
-		// Since we don't handle signal, this exits immediatly? Or does it hit max timeout to exit?
 		wg := &sync.WaitGroup{}
 		wg.Add(1)
 		wg.Wait()

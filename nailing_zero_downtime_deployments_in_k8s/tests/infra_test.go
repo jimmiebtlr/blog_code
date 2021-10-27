@@ -18,15 +18,15 @@ import (
 
 var transport http.RoundTripper = &http.Transport{
 	Proxy:                 http.ProxyFromEnvironment,
-	ResponseHeaderTimeout: 3 * time.Second,
+	ResponseHeaderTimeout: 1 * time.Second,
 }
 
 var client = &http.Client{Transport: transport}
 
 // This assumes the kubectl tool is setup properly for the cluster you'd like to use for testing.
 
-const deployCount = 30
-const requestWorkerCount = 50
+const deployCount = 5
+const requestWorkerCount = 10
 
 // deploy creates namespace for deployment, and runs deploy.
 func deploy(t *testing.T, name, namespace, path string) (url string) {
@@ -75,7 +75,6 @@ func startRequester(t *testing.T, c *StatusCodeCounter, url string, doneMutex *D
 
 		resp, err := client.Get(url)
 		if err != nil {
-			t.Log(err, resp.StatusCode)
 			c.Inc(-1)
 		} else {
 			resp.Body.Close()
@@ -84,12 +83,15 @@ func startRequester(t *testing.T, c *StatusCodeCounter, url string, doneMutex *D
 	}
 }
 
-func TestNoDowntime(t *testing.T) {
+// runDeployTest sets up a kubernetes yaml file (should be a deploy + service)
+// from the passed in path in a created namespace.  It then runs alot of requests
+// against that deployment while re-deploying as soon as a re-deploy completes.
+// It returns a map of status code to count.
+func runDeployTest(t *testing.T, path string) (results map[int]int) {
 	runtime.GOMAXPROCS(requestWorkerCount)
 
 	name := "no-downtime"
 	namespace := name + uuid.NewString()
-	path := "./deployment_no_downtime.yaml"
 
 	// Onetime setup
 	options := k8s.NewKubectlOptions("", "", namespace)
@@ -119,101 +121,60 @@ func TestNoDowntime(t *testing.T) {
 	// Workers wait on deploys to finish.  Wait here for workers to finish
 	workerWg.Wait()
 
-	// Check that we have one status code for all the requests, that
-	// there were many of them, and that the statusCode is 200.
-	fmt.Println("Response code map: ")
-	spew.Dump(c.Map)
-
-	assert.Equal(t, len(c.Map), 1, "There should only be one response code type.")
-	assert.Greater(t, c.Map[200], 100, "Greater than 100 requests should have happened")
+	return c.Map
 }
 
-func TestNoReadiness(t *testing.T) {
-	runtime.GOMAXPROCS(requestWorkerCount)
-
-	name := "no-downtime"
-	namespace := name + uuid.NewString()
-	path := "./deployment_no_readiness.yaml"
-
-	// Onetime setup
-	options := k8s.NewKubectlOptions("", "", namespace)
-	k8s.CreateNamespace(t, options, namespace)
-	defer k8s.DeleteNamespace(t, options, namespace)
-
-	// Deploy and wait for it to be active
-	url := deploy(t, name, namespace, path)
-
-	doneMutex := NewDone()
-	c := NewStatusCodeCounter()
-
-	workerWg := &sync.WaitGroup{}
-	workerWg.Add(requestWorkerCount)
-
-	for i := 0; i < requestWorkerCount; i++ {
-		go startRequester(t, c, url, doneMutex, workerWg)
-	}
-
-	for i := 0; i < deployCount; i++ {
-		// Redeploy while we're running requests, to see if any requests fail
-		restart(t, name, namespace)
-	}
-
-	doneMutex.SetDone()
-
-	// Workers wait on deploys to finish.  Wait here for workers to finish
-	workerWg.Wait()
+// TestNoDowntime checks the effects of having podStop and readiness checks enabled.
+func TestNoDowntime(t *testing.T) {
+	result := runDeployTest(t, "./deployment_no_downtime.yaml")
 
 	// Check that we have one status code for all the requests, that
 	// there were many of them, and that the statusCode is 200.
 	fmt.Println("Response code map: ")
-	spew.Dump(c.Map)
+	spew.Dump(result)
 
-	assert.Equal(t, 2, len(c.Map), "There should be 2 response code type. (one for conn refused, and 200s)")
-	assert.Greater(t, c.Map[200], 0, "There should be some successful requests")
+	assert.Equal(t, len(result), 1, "There should only be one response code type.")
+	assert.Greater(t, result[200], 100, "Resp code should be 200 and Greater than 100 requests should have happened")
+}
+
+//TestNoDowntimeGraceful checks the effects of having graceful shutdown and readiness checks enabled.
+func TestNoDowntimeGraceful(t *testing.T) {
+	result := runDeployTest(t, "./deployment_no_downtime_graceful.yaml")
+
+	// Check that we have one status code for all the requests, that
+	// there were many of them, and that the statusCode is 200.
+	fmt.Println("Response code map: ")
+	spew.Dump(result)
+
+	assert.Equal(t, len(result), 1, "There should only be one response code type.")
+	assert.Greater(t, result[200], 100, "Resp code should be 200 and Greater than 100 requests should have happened")
+}
+
+//TestNoReadiness checks the effects of having podStop but no readiness checks.
+func TestNoReadiness(t *testing.T) {
+	result := runDeployTest(t, "./deployment_no_readiness.yaml")
+
+	// Check that we have one status code for all the requests, that
+	// there were many of them, and that the statusCode is 200.
+	fmt.Println("Response code map: ")
+	spew.Dump(result)
+
+	assert.Equal(t, 2, len(result), "There should be 2 response code type. (one for conn refused, and 200s)")
+	assert.Greater(t, result[200], 0, "There should be some successful requests")
+	assert.Greater(t, result[-1], 0, "There should be some request errors")
 }
 
 func TestNoPodStop(t *testing.T) {
-	runtime.GOMAXPROCS(requestWorkerCount)
-
-	name := "no-downtime"
-	namespace := name + uuid.NewString()
-	path := "./deployment_no_pod_stop.yaml"
-
-	// Onetime setup
-	options := k8s.NewKubectlOptions("", "", namespace)
-	k8s.CreateNamespace(t, options, namespace)
-	defer k8s.DeleteNamespace(t, options, namespace)
-
-	// Deploy and wait for it to be active
-	url := deploy(t, name, namespace, path)
-
-	doneMutex := NewDone()
-	c := NewStatusCodeCounter()
-
-	workerWg := &sync.WaitGroup{}
-	workerWg.Add(requestWorkerCount)
-
-	for i := 0; i < requestWorkerCount; i++ {
-		go startRequester(t, c, url, doneMutex, workerWg)
-	}
-
-	for i := 0; i < deployCount; i++ {
-		// Redeploy while we're running requests, to see if any requests fail
-		restart(t, name, namespace)
-	}
-
-	doneMutex.SetDone()
-
-	// Workers wait on deploys to finish.  Wait here for workers to finish
-	workerWg.Wait()
+	result := runDeployTest(t, "./deployment_no_pod_stop.yaml")
 
 	// Check that we have one status code for all the requests, that
 	// there were many of them, and that the statusCode is 200.
 	fmt.Println("Response code map: ")
-	spew.Dump(c.Map)
+	spew.Dump(result)
 
-	assert.Equal(t, 2, len(c.Map), 2, "There should be 2 response code type. (one for conn refused, and 200s)")
-	assert.Greater(t, c.Map[200], 0, "There should be some successful requests")
+	assert.Equal(t, 2, len(result), 2, "There should be 2 response code type. (one for conn refused, and 200s)")
+	assert.Greater(t, result[200], 0, "There should be some successful requests")
+	assert.Greater(t, result[-1], 0, "There should be some request errors")
 }
 
 // StatusCodeCounter counts the number of status codes.  Concurrent safe.

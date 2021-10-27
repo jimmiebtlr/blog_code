@@ -20,16 +20,11 @@ spec:
         - name: app
           image: jimmiebtlr/infra-debug-service:0.1.4
           command: ["./app"]
-          args: ["--port", "8080"]
+          args: ["--port", "8080", "--graceful"]
 
           ports:
             - name: app-port
               containerPort: 8080
-
-          lifecycle:
-            preStop:
-              exec:
-                command: ["sleep", "20"]
 
           readinessProbe:
             httpGet:

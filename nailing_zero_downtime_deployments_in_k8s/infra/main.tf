@@ -6,7 +6,7 @@ provider "google" {
 }
 
 resource "google_container_cluster" "no_downtime" {
-  name               = "no-downtime-deploys"
+  name               = "no-downtime-deploy"
   location           = "us-central1-a"
   initial_node_count = 1
 }

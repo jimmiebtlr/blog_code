@@ -2,6 +2,7 @@ FROM golang:1.17
 
 
 WORKDIR /go/src/app
+# Copy go.mod and go.sum
 COPY go.* ./
 RUN go mod tidy
 

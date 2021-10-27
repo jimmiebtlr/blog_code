@@ -12,6 +12,8 @@ if [ ! -f "$GCLOUD_ADC_PATH" ]; then
 
     gcloud auth activate-service-account --key-file $GCLOUD_ADC_PATH
     gcloud config set project $GOOGLE_PROJECT_ID
+
+    export TF_VAR_project=$GOOGLE_PROJECT_ID
 fi
 
 export GOOGLE_APPLICATION_CREDENTIALS="$GCLOUD_ADC_PATH"
